@@ -1,0 +1,80 @@
+version: "3.9"
+
+services:
+
+  redis:
+    image: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - livekit-net
+
+  livekit:
+    image: livekit/livekit-server
+    platform: linux/arm64
+    command: --config /livekit.yaml
+    volumes:
+      - ./livekit.yaml:/livekit.yaml
+    ports:
+      - "7880:7880"
+      - "7881:7881/tcp"
+      - "50000-50060:50000-50060/udp"
+    networks:
+      - livekit-net
+
+  egress:
+    image: livekit/egress
+    platform: linux/arm64
+    depends_on:
+     - redis
+     - livekit
+    environment:
+      - EGRESS_CONFIG_FILE=/config.yaml
+      - EGRESS_AUDIO_ENABLED=true
+    volumes:
+      - ./egress.yaml:/config.yaml
+      - ./recordings:/out
+    ports:
+      - "7980:7980"
+    networks:
+      - livekit-net
+
+  agent:
+    build: .
+    depends_on:
+      - livekit
+      - memory-service
+    env_file:
+      - .env
+    environment:
+      - MEMORY_SERVICE_URL=http://memory-service:8001
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./transcripts:/app/transcripts  
+    networks:
+      - livekit-net
+
+  qdrant:
+    image: qdrant/qdrant
+    container_name: qdrant
+    ports:
+      - "6333:6333"
+    networks:
+      - livekit-net
+
+  memory-service:
+    build: .
+    command: uvicorn memory_service:app --host 0.0.0.0 --port 8001
+    depends_on:
+      - qdrant
+    env_file:
+      - .env
+    volumes:
+      - ./transcripts:/app/transcripts
+    ports:
+      - "8001:8001"
+    networks:
+      - livekit-net
+
+networks:
+  livekit-net:

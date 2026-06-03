@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>VoiceBot Client</title>
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.17.3/dist/livekit-client.umd.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f1117;
+      color: #e0e0e0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      width: 400px;
+      padding: 2rem;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 1.5rem;
+      text-align: center;
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      color: #888;
+      margin-bottom: 0.3rem;
+    }
+
+    input {
+      width: 100%;
+      padding: 0.6rem;
+      margin-bottom: 1rem;
+      border: 1px solid #333;
+      border-radius: 6px;
+      background: #1a1d27;
+      color: #e0e0e0;
+      font-size: 0.9rem;
+    }
+
+    button {
+      width: 100%;
+      padding: 0.75rem;
+      border: none;
+      border-radius: 6px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    #connectBtn {
+      background: #3b82f6;
+      color: white;
+    }
+
+    #connectBtn:hover {
+      background: #2563eb;
+    }
+
+    #connectBtn:disabled {
+      background: #555;
+      cursor: not-allowed;
+    }
+
+    #disconnectBtn {
+      background: #ef4444;
+      color: white;
+      display: none;
+      margin-top: 0.5rem;
+    }
+
+    #disconnectBtn:hover {
+      background: #dc2626;
+    }
+
+    #status {
+      text-align: center;
+      margin-top: 1rem;
+      padding: 0.5rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
+    }
+
+    .connected {
+      background: #064e3b;
+      color: #6ee7b7;
+    }
+
+    .disconnected {
+      background: #7f1d1d;
+      color: #fca5a5;
+    }
+
+    .connecting {
+      background: #78350f;
+      color: #fcd34d;
+    }
+
+    #log {
+      margin-top: 1rem;
+      max-height: 300px;
+      overflow-y: auto;
+      font-size: 0.8rem;
+      background: #1a1d27;
+      border-radius: 6px;
+      padding: 0.75rem;
+    }
+
+    .log-entry {
+      margin-bottom: 0.3rem;
+    }
+
+    .log-user {
+      color: #60a5fa;
+    }
+
+    .log-agent {
+      color: #34d399;
+    }
+
+    .log-system {
+      color: #888;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>VoiceBot Client</h1>
+
+    <label>LiveKit Server URL</label>
+    <input id="urlInput" value="ws://localhost:7880" />
+
+    <label>Token</label>
+    <input id="tokenInput" placeholder="Paste token from generate_token.py" />
+
+    <button id="inviteBtn" onclick="inviteFriends()" disabled>Invite Friends</button>
+
+    <input type="text" id="inviteLink" placeholder="Invite link will appear here" readonly />
+
+    <button id="copyBtn" onclick="copyLink()" style="display:none;">
+      Copy Invite Link
+    </button>
+
+    <button id="connectBtn" onclick="connect()">Connect & Start Mic</button>
+    <button id="disconnectBtn" onclick="disconnect()">Disconnect</button>
+
+    <div id="status"></div>
+    <div id="log"></div>
+  </div>
+
+  <script>
+    let room = null;
+    let currentUserId = null;
+    let currentRoom = null;
+    let activeInvite = null;
+
+    let userId = localStorage.getItem("user_id");
+
+    if (!userId) {
+      userId = "user_" + Math.random().toString(36).substring(2, 9);
+      localStorage.setItem("user_id", userId);
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const invite = params.get("invite");
+
+    function log(msg, cls = 'system') {
+      const el = document.getElementById('log');
+      const entry = document.createElement('div');
+      entry.className = `log-entry log-${cls}`;
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      el.appendChild(entry);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function setStatus(text, cls) {
+      const el = document.getElementById('status');
+      el.textContent = text;
+      el.className = cls;
+    }
+
+    function inviteFriends() {
+      if (!activeInvite) {
+        alert("Connect first");
+        return;
+      }
+
+      const link = `http://localhost:3000/client.html?invite=${activeInvite}`;
+
+      document.getElementById("inviteLink").value = link;
+      document.getElementById('copyBtn').style.display = 'block';
+
+      log("Invite link generated", "system");
+    }
+
+    function copyLink() {
+      const input = document.getElementById("inviteLink");
+      input.select();
+      document.execCommand("copy");
+      alert("Invite link copied!");
+    }
+
+    async function connect() {
+      const url = document.getElementById('urlInput').value.trim();
+      let token = document.getElementById('tokenInput').value.trim();
+
+      if (!token) {
+        let currentInvite = invite;
+
+        if (!currentInvite) {
+          const inviteRes = await fetch("http://localhost:8000/create-invite");
+          const inviteData = await inviteRes.json();
+
+          currentInvite = inviteData.invite_id;
+
+          window.history.replaceState({}, "", `?invite=${currentInvite}`);
+        }
+
+        const res = await fetch(`http://localhost:8000/join-by-invite/${currentInvite}?user_id=${userId}`);
+        const data = await res.json();
+
+        if (data.error) {
+          alert(data.error);
+          return;
+        }
+
+        currentUserId = userId;
+        currentRoom = data.room_name;
+        token = data.token;
+
+        activeInvite = currentInvite;
+
+        log("Token fetched from backend", "system");
+      }
+
+      document.getElementById('connectBtn').disabled = true;
+      setStatus('Connecting...', 'connecting');
+      log('Connecting to ' + url);
+
+      try {
+        room = new LivekitClient.Room({
+          adaptiveStream: true,
+          dynacast: true,
+        });
+
+        room.on(LivekitClient.RoomEvent.Connected, () => {
+          setStatus('Connected — speak into your mic', 'connected');
+          log('Connected to room');
+          document.getElementById('disconnectBtn').style.display = 'block';
+          document.getElementById('inviteBtn').disabled = false;
+        });
+
+        room.on(LivekitClient.RoomEvent.Disconnected, () => {
+          setStatus('Disconnected', 'disconnected');
+          log('Disconnected');
+          cleanup();
+        });
+
+        room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, pub, participant) => {
+          const el = track.attach();
+
+          if (track.kind === 'audio') {
+            document.body.appendChild(el);
+            log('Agent audio track received', 'agent');
+          }
+        });
+
+        room.on(LivekitClient.RoomEvent.DataReceived, (data, participant) => {
+          const msg = new TextDecoder().decode(data);
+          log('Agent: ' + msg, 'agent');
+        });
+
+        room.on(LivekitClient.RoomEvent.ParticipantConnected, (p) => {
+          log('Participant joined: ' + p.identity, 'system');
+        });
+
+        await room.connect(url, token);
+        await room.localParticipant.setMicrophoneEnabled(true);
+        log('Microphone enabled', 'user');
+
+      } catch (e) {
+        setStatus('Connection failed', 'disconnected');
+        log('Error: ' + e.message);
+        cleanup();
+      }
+    }
+
+    async function disconnect() {
+      if (currentUserId && currentRoom) {
+        await fetch(`http://localhost:8000/leave/${currentRoom}/${currentUserId}`, {
+          method: "POST"
+        });
+      }
+
+      if (room) {
+        await room.disconnect();
+      }
+
+      cleanup();
+    }
+
+    function cleanup() {
+      room = null;
+      document.getElementById('connectBtn').disabled = false;
+      document.getElementById('disconnectBtn').style.display = 'none';
+      document.getElementById('inviteBtn').disabled = true;
+      document.getElementById('copyBtn').style.display = 'none';
+    }
+
+    window.addEventListener("unload", () => {
+      if (currentUserId && currentRoom) {
+        navigator.sendBeacon(
+          `http://localhost:8000/leave/${currentRoom}/${currentUserId}`
+        );
+      }
+    });
+  </script>
+</body>
+
+</html>

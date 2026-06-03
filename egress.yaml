@@ -1,0 +1,8 @@
+api_key: devkey
+api_secret: secretsecretsecretsecretsecretsecretsecretsecretsecretsecretsecret
+
+ws_url: ws://livekit:7880
+
+redis:
+  address: redis:6379
+

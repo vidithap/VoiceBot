@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./venv/Scripts/pip freeze *)",
+      "Bash(./venv/Scripts/python -m pip freeze)",
+      "Bash(C:/Users/RBinayRam/Downloads/VoiceBot 2/VoiceBot/venv/Scripts/pip.exe freeze *)",
+      "Bash(C:/Users/RBinayRam/Downloads/VoiceBot 2/VoiceBot/venv/Scripts/python.exe *)",
+      "Bash(grep '\\\\.dist-info$')",
+      "Bash(sed 's/\\\\.dist-info$//')",
+      "Bash(xargs grep *)",
+      "WebFetch(domain:raw.githubusercontent.com)"
+    ]
+  }
+}
