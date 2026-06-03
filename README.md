@@ -111,6 +111,6 @@ VoiceBot/
 
 ## Notes
 
-- The Math Agent communicates with the Main Agent via targeted LiveKit data packets — the browser never sees these internal messages
+- The Math Agent communicates with the Main Agent via targeted LiveKit data packets, the browser never sees these internal messages
 - Memory extraction uses an LLM to decide what's worth remembering, deduplicates using cosine similarity, and updates existing memories when corrected
 - Conversation recordings are saved to the `recordings/` folder via LiveKit Egress
